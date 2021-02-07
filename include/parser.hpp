@@ -12,4 +12,4 @@ std::vector<std::string> split(std::string str, char delimeter);
 
 
 // Reads a file and generates the adjacency matrix
-Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> parseFile(std::string path);
+Eigen::MatrixXf parseFile(std::string path);

@@ -18,12 +18,12 @@ std::vector<std::string> split(std::string str, char delimeter){
 
 
 // Reads a file and generates the adjacency matrix
-Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> parseFile(std::string path) {
+Eigen::MatrixXf parseFile(std::string path) {
 
 	std::ifstream in(path);
 	if(!in.is_open()) {
 		std::cout << "ERROR: file not found" << std::endl;
-		return Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> ();
+		return Eigen::MatrixXf();
 	}
 
 
@@ -35,7 +35,7 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> parseFile(std::string path)
 
 
 	// Initialize Eigen::Array
-	Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> A;
+	Eigen::MatrixXf A;
 	A.resize(dim, dim);
 
 	for(unsigned i=0; i<dim; i++) {
