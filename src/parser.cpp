@@ -52,3 +52,41 @@ Eigen::MatrixXf parseFile(std::string path) {
 
 	return A;
 }
+
+
+
+// Generates a graph of size n with a probability p of edge spawn,
+// and saves it in path
+void genGraph(std::string path, unsigned n, float p) {
+	srand(time(NULL));
+
+	std::ofstream file;
+	file.open (path);
+
+	file << n << std::endl;
+
+	for(unsigned i=0; i<n; i++) {
+		// Prevent non-connective graph
+		bool isConnected = false;
+
+		for(unsigned j=0; j<n; j++) {
+			float rand = (float) std::rand() / RAND_MAX;
+			if(rand < p && i != j) {
+				file << j << " ";
+				isConnected = true;
+			}
+		}
+
+		// Adding additional edge is node is not connected
+		if(!isConnected) {
+			// Pick a random edge != i
+			unsigned edge = i;
+			while(edge != i) {
+				edge = std::rand() % static_cast<unsigned>(n + 1);
+			}
+			file << edge << " ";
+		}
+
+		file << std::endl;
+	}
+}
