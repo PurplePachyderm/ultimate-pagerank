@@ -17,8 +17,8 @@ std::vector<std::string> split(std::string str, char delimeter){
 
 
 
-// Reads a file and generates the adjacency matrix
-Eigen::MatrixXf parseFile(std::string path) {
+// Reads a neighbours list and generates the adjacency matrix
+Eigen::MatrixXf parseNeighboursList(std::string path) {
 
 	std::ifstream in(path);
 	if(!in.is_open()) {
@@ -44,9 +44,11 @@ Eigen::MatrixXf parseFile(std::string path) {
 		std::getline(in, line);
 		std::vector<std::string> stringElements = split(line, ' ');
 
-		for(unsigned j=0; j< stringElements.size(); j++) {
-			float index = std::stof(stringElements[j]);
-			A(i, index) = 1.0f;
+		unsigned  startId = std::stof(stringElements[0]);
+
+		for(unsigned j=1; j< stringElements.size(); j++) {
+			float destId = std::stof(stringElements[j]);
+			A(startId, destId) = 1.0f;
 		}
 	}
 
@@ -55,9 +57,44 @@ Eigen::MatrixXf parseFile(std::string path) {
 
 
 
+// Reads an edges list and generates the adjacency matrix
+Eigen::MatrixXf parseEdgesList(std::string path) {
+
+	std::ifstream in(path);
+	if(!in.is_open()) {
+		std::cout << "ERROR: file not found" << std::endl;
+		return Eigen::MatrixXf();
+	}
+
+
+	std::string line;
+
+	// Get rows
+	std::getline(in, line);
+	unsigned dim = std::stoi(line);
+
+
+	// Initialize Eigen::Array
+	Eigen::MatrixXf A;
+	A.resize(dim, dim);
+
+	while(std::getline(in, line)) {
+		std::vector<std::string> stringElements = split(line, ' ');
+
+		float start = std::stof(stringElements[0]);
+		float end = std::stof(stringElements[1]);
+
+		A(start, end) = 1.0f;
+	}
+
+	return A;
+}
+
+
+
 // Generates a graph of size n with a probability p of edge spawn,
-// and saves it in path
-void genGraph(std::string path, unsigned n, float p) {
+// and saves it in path (as a neighbours list)
+void genNeighboursList(std::string path, unsigned n, float p) {
 	srand(time(NULL));
 
 	std::ofstream file;
@@ -77,7 +114,7 @@ void genGraph(std::string path, unsigned n, float p) {
 			}
 		}
 
-		// Adding additional edge is node is not connected
+		// Adding additional edge if node is not connected
 		if(!isConnected) {
 			// Pick a random edge != i
 			unsigned edge = i;

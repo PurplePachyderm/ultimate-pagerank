@@ -13,11 +13,16 @@ std::vector<std::string> split(std::string str, char delimeter);
 
 
 
-// Reads a file and generates the adjacency matrix
-Eigen::MatrixXf parseFile(std::string path);
+// Reads a neighbours list and generates the adjacency matrix
+Eigen::MatrixXf parseNeighboursList(std::string path);
+
+
+
+// Reads an edges list and generates the adjacency matrix
+Eigen::MatrixXf parseEdgesList(std::string path);
 
 
 
 // Generates a graph of size n with a probability p of edge spawn,
-// and saves it in path
-void genGraph(std::string path, unsigned n, float p);
+// and saves it in path (as a neighbours list)
+void genNeighboursList(std::string path, unsigned n, float p);

@@ -23,7 +23,7 @@ Eigen::MatrixXf probMatrix(Eigen::MatrixXf &R, float alpha) {
 
 			// No edges
 			else {
-				A.block(0, j, A.rows(), j).fill(1.0 / A.cols());
+				A.block(0, j, A.rows(), 1).fill(1.0 / A.cols());
 			}
 		}
 
