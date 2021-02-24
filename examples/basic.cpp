@@ -1,5 +1,5 @@
-#include "include/parser.hpp"
-#include "include/pagerank.hpp"
+#include "../include/parser.hpp"
+#include "../include/pagerank.hpp"
 
 int main(void) {
 

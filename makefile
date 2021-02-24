@@ -13,10 +13,13 @@ OBJ_FILES=$(patsubst $(SRC)/%.cpp, $(BIN)/%.o, $(wildcard $(SRC)/*.cpp))
 
 # Targets
 
-all: main
+all: basic epidemic
 
-main: $(OBJ_FILES)
-	$(CC) $@.cpp  $(CPPFLAGS) $(OPT_FLAGS) -o $@ $(OBJ_FILES)
+basic: $(OBJ_FILES)
+	$(CC) examples/$@.cpp  $(CPPFLAGS) $(OPT_FLAGS) -o $@ $(OBJ_FILES)
+
+epidemic: $(OBJ_FILES)
+	$(CC) examples/$@.cpp  $(CPPFLAGS) $(OPT_FLAGS) -o $@ $(OBJ_FILES)
 
 $(OBJ_FILES): $(BIN)/%.o : $(SRC)/%.cpp
 	$(CC) $(CPPFLAGS) $(OPT_FLAGS) $< -c -o $@
@@ -24,12 +27,12 @@ $(OBJ_FILES): $(BIN)/%.o : $(SRC)/%.cpp
 
 # Phonies
 
-.PHONY: clean clean_o clean_main
+.PHONY: clean clean_o clean_examples
 
-clean: clean_o clean_main
+clean: clean_o clean_examples
 
 clean_o:
 	find $(BIN) -name "*.o" -type f -delete
 
-clean_main:
-	rm main
+clean_examples:
+	rm basic epidemic

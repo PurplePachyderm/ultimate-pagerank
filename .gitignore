@@ -1,4 +1,5 @@
-main
+basic
+epidemic
+
 *.txt
 !data.txt
-!data2.txt
