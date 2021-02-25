@@ -20,6 +20,7 @@ public:
 };
 
 
+
 // Modify matrix to make sure that all edges go both way
 void removeOrientation(Eigen::MatrixXf &R) {
 	for(unsigned j=0; j<R.cols(); j++) {
@@ -36,6 +37,38 @@ void removeOrientation(Eigen::MatrixXf &R) {
 
 
 
+// From a graph's adjacency matrix, generate its probability matrix A
+Eigen::MatrixXf infectionMatrix(Eigen::MatrixXf &R, float alpha, float nu) {
+
+		Eigen::MatrixXf Rt = R.transpose();
+		Eigen::MatrixXf Rsum = Rt.colwise().sum();
+
+		// Create probability matrix A
+		Eigen::MatrixXf A = Eigen::MatrixXf();
+		A.resize(R.rows(), R.cols());
+
+		// Fill A
+		for(unsigned j=0; j<Rt.cols(); j++) {
+
+			// Has edges
+			if(Rsum(0, j) != 0) {
+				for(unsigned i=0; i<A.rows(); i++) {
+					A(i, j) =
+					alpha * Rt(i, j) / Rsum(0, j) + nu / A.cols();
+				}
+			}
+
+			// No edges
+			else {
+				A.block(0, j, A.rows(), 1).fill(nu / A.cols());
+			}
+		}
+
+		return A;
+}
+
+
+
 // Re-implementation PageRank but adding steps to fully simulate the evolution
 // of cases in the epidemic. Returns array containing infected, healed, and
 // vaccinated after each timestep
@@ -43,6 +76,7 @@ std::vector<EpidemicState> simulateEpidemic(
 	Eigen::MatrixXf &R,
 	unsigned timesteps,
 	float alpha,
+	float nu,
 	float delta,
 	std::vector<float> v
 ) {
@@ -55,7 +89,7 @@ std::vector<EpidemicState> simulateEpidemic(
 	float vaccinated = 0;	// Proportion of vaccinated
 
 	// Get probability matrix
-	Eigen::MatrixXf A = probMatrix(R, alpha);
+	Eigen::MatrixXf A = infectionMatrix(R, alpha, nu);
 
 	// Initialize x
 	Eigen::MatrixXf x;
@@ -76,6 +110,8 @@ std::vector<EpidemicState> simulateEpidemic(
 
 		// Update simulation
 		x = A * x;
+		x = x / x.sum();
+
 		uncured = uncured * (1.0f - delta);
 		vaccinated = vaccinated + v[k];
 
@@ -98,8 +134,10 @@ std::vector<EpidemicState> simulateEpidemic(
 
 int main(void) {
 
-	float alpha = 0.85f;
 	int timesteps = 100;
+	float alpha = 0.65f;
+	float nu = 0.85f;
+	float delta = 0.02f;
 
 	std::vector<float> v = {};
 	for(int i=0; i<timesteps; i++) {
@@ -111,7 +149,11 @@ int main(void) {
 	removeOrientation(R);
 
 
-	std::vector<EpidemicState> results = simulateEpidemic(R, timesteps, alpha, 0.02, v);
+	std::vector<EpidemicState> results = simulateEpidemic(
+		R, timesteps,
+		alpha, nu,
+		delta, v
+	);
 
 	for(int i=0; i<timesteps; i++) {
 		std::cout << "Results " << i << ":" << std::endl;
