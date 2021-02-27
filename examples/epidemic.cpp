@@ -118,7 +118,7 @@ void infectByJumping(
 
 		// We found a potential target
 		if((unsigned) node != j && !A(j, node)) {
-			if(genProba() < alpha) {
+			if(genProba() < (1 - alpha)) {
 				if(!isVaccinated(vaccinated, node)) {
 					// Same remark
 					infections(node) = 1;
@@ -364,26 +364,9 @@ int main(void) {
 	float alpha = 0.85;
 	float delta = 0.24;
 	unsigned nInfInit = 5;
-	unsigned nVaccInit = 1200;
+	unsigned nVaccInit = 800;
 
-	// std::vector<unsigned> results = simulateRandomVaccination(
-	// 	"facebook_combined.txt",
-	// 	kMax,
-	// 	nu,
-	// 	alpha,
-	// 	delta,
-	// 	nInfInit,
-	// 	nVaccInit
-	// );
-	// std::cout << "nTrue = " << nTrue << std::endl;
-	// std::cout << "nFalse = " << nFalse << std::endl;
-
-	// exportResults(results, "epidemic_random.txt");
-
-
-	// Alternative : smart vaccination (PageRank based)
-
-	std::vector<unsigned> results = simulateSmartVaccination(
+	std::vector<unsigned> results = simulateRandomVaccination(
 		"facebook_combined.txt",
 		kMax,
 		nu,
@@ -393,7 +376,22 @@ int main(void) {
 		nVaccInit
 	);
 
-	exportResults(results, "epidemic_smart.txt");
+	exportResults(results, "epidemic_random.txt");
+
+
+	// Alternative : smart vaccination (PageRank based)
+
+	// std::vector<unsigned> results = simulateSmartVaccination(
+	// 	"facebook_combined.txt",
+	// 	kMax,
+	// 	nu,
+	// 	alpha,
+	// 	delta,
+	// 	nInfInit,
+	// 	nVaccInit
+	// );
+
+	// exportResults(results, "epidemic_smart.txt");
 
 
 
