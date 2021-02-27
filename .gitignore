@@ -3,3 +3,5 @@ epidemic
 
 *.txt
 !data.txt
+
+*.png

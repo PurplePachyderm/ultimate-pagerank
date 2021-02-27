@@ -3,6 +3,7 @@
 #include<fstream>
 #include <sys/stat.h>
 #include <cstdlib>
+#include <iomanip>
 
 #include "../include/parser.hpp"
 #include "../include/pagerank.hpp"
@@ -22,41 +23,13 @@ unsigned genInteger(unsigned max) {
 
 
 
-void removeMatRow(Eigen::MatrixXf& mat, unsigned rowToRemove) {
-    unsigned numRows = mat.rows() - 1;
-    unsigned numCols = mat.cols();
-
-    if( rowToRemove < numRows ) {
-        mat.block(rowToRemove, 0, numRows-rowToRemove,numCols) = mat.bottomRows(numRows - rowToRemove);
+bool isVaccinated(std::vector<unsigned> &vaccinated, unsigned &node) {
+	for(unsigned i=0; i<vaccinated.size(); i++) {
+		if(vaccinated[i] == node) {
+			return 1;
+		}
 	}
-
-    mat.conservativeResize(numRows,numCols);
-}
-
-
-
-void removeArrrRow(Eigen::ArrayXf& array, unsigned rowToRemove) {
-    unsigned numRows = array.rows() - 1;
-    unsigned numCols = array.cols();
-
-    if( rowToRemove < numRows ) {
-        array.block(rowToRemove, 0, numRows-rowToRemove,numCols) = array.bottomRows(numRows - rowToRemove);
-	}
-
-    array.conservativeResize(numRows,numCols);
-}
-
-
-
-void removeMatColumn(Eigen::MatrixXf& mat, unsigned colToRemove) {
-    unsigned numRows = mat.rows();
-    unsigned numCols = mat.cols() - 1;
-
-    if( colToRemove < numCols ) {
-        mat.block(0, colToRemove, numRows, numCols-colToRemove) = mat.rightCols(numCols - colToRemove);
-	}
-
-    mat.conservativeResize(numRows,numCols);
+	return 0;
 }
 
 
@@ -71,13 +44,11 @@ void exportResults(std::vector<unsigned> &results, std::string path) {
 	freopen(path.c_str(), "w", stdout);
 
 	for(unsigned i=0; i<results.size(); i++) {
-		std::cout << results[i] << std::endl;
+		std::cout << (float) results[i] + 0.001f << std::endl;
 	}
 
 	std::cout.rdbuf( oldCoutStreamBuf );
 }
-
-
 
 
 
@@ -105,6 +76,7 @@ void removeOrientation(Eigen::MatrixXf &A) {
 
 void infectNeigbours(
 	Eigen::MatrixXf &A, Eigen::ArrayXf &infections,
+	std::vector<unsigned> &vaccinated,
 	unsigned &j, float nu
 ) {
 
@@ -115,9 +87,11 @@ void infectNeigbours(
 		if(A(i, j)) {
 			// ... try to infect it with a probability nu
 			if(genProba() < nu) {
-				// It will be active from this step if i>j !
-				// (this should not affect the simulation results too much)
-				infections(i) = 1;
+				if(!isVaccinated(vaccinated, i)) {
+					// It will be active from this step if i>j !
+					// (this should not affect the simulation results too much)
+					infections(i) = 1;
+				}
 			}
 		}
 	}
@@ -127,6 +101,7 @@ void infectNeigbours(
 
 void infectByJumping(
 	Eigen::MatrixXf &A, Eigen::ArrayXf &infections,
+	std::vector<unsigned> &vaccinated,
 	unsigned &j, float alpha
 ) {
 	// First, make sure that this node is not neighbour with everyone to
@@ -144,7 +119,10 @@ void infectByJumping(
 		// We found a potential target
 		if((unsigned) node != j && !A(j, node)) {
 			if(genProba() < alpha) {
-				infections(node) = 1;
+				if(!isVaccinated(vaccinated, node)) {
+					// Same remark
+					infections(node) = 1;
+				}
 			}
 
 			complete = true;	// Mark tentative as complete
@@ -159,6 +137,7 @@ void infectByJumping(
 std::vector<unsigned> loopSimulation(
 	Eigen::MatrixXf &A,
 	Eigen::ArrayXf &infections,
+	std::vector<unsigned> vaccinated,
 	unsigned &kMax,
 	float &nu,
 	float &alpha,
@@ -184,10 +163,10 @@ std::vector<unsigned> loopSimulation(
 			if(infections(j)) {
 
 				// Iterate over all nodes again, check if they are neighbours
-				infectNeigbours(A, infections, j, nu);
+				infectNeigbours(A, infections, vaccinated, j, nu);
 
 				// Pick a non neighbour node and try to infect it
-				infectByJumping(A, infections, j, alpha);
+				infectByJumping(A, infections, vaccinated, j, alpha);
 
 				// Try to cure that node
 				if(genProba() < delta) {
@@ -256,15 +235,28 @@ std::vector<unsigned> simulateRandomVaccination(
 
 		// Vaccinate randomly
 
-	for(unsigned i=0; i<nVaccInit; i++){
-		// We will directly remove the node, thus verifications are not
-		// needed after picking
+	std::vector<unsigned> vaccinated = {};
+	while(vaccinated.size() < nVaccInit) {
 		unsigned node = genInteger(A.rows());
 
-		removeMatRow(A, node);
-		removeMatColumn(A, node);
-		removeArrrRow(infections, node);
+		// Make sure it has not been picked before
+		bool picked = false;
+		for(unsigned i=0; i<vaccinated.size(); i++) {
+			if(picked == vaccinated[i]) {
+				picked = true;
+				break;
+			}
+		}
+
+		if(picked) {
+			continue;
+		}
+
+		// At this point, node has not been added and can be infected
+		infections(node) = 0;
+		vaccinated.push_back(node);
 	}
+
 
 
 		// Compute actual core of simulation (independant of vaccination methods)
@@ -272,6 +264,7 @@ std::vector<unsigned> simulateRandomVaccination(
 	return loopSimulation(
 		A,
 		infections,
+		vaccinated,
 		kMax,
 		nu,
 		alpha,
@@ -336,13 +329,14 @@ std::vector<unsigned> simulateSmartVaccination(
 
 	// Get the nVaccInit biggest elements of the PageRank vector,
 	// and delete (vaccinate) them
+	std::vector<unsigned> vaccinated = {};
+	int maxIndex;
 	for(unsigned i=0; i<nVaccInit; i++) {
-		int maxIndex;
 		x.col(0).maxCoeff(&maxIndex);
 
-		removeMatRow(A, maxIndex);
-		removeMatColumn(A, maxIndex);
-		removeArrrRow(infections, maxIndex);
+		infections(maxIndex) = 0;
+		x(maxIndex) = 0;
+		vaccinated.push_back(maxIndex);
 	}
 
 
@@ -351,6 +345,7 @@ std::vector<unsigned> simulateSmartVaccination(
 	return loopSimulation(
 		A,
 		infections,
+		vaccinated,
 		kMax,
 		nu,
 		alpha,
@@ -362,15 +357,33 @@ std::vector<unsigned> simulateSmartVaccination(
 
 int main(void) {
 	srand (time(NULL));
+	std::cout << std::setprecision(10);
 
 	unsigned kMax = 100;
 	float nu = 0.2;
 	float alpha = 0.85;
 	float delta = 0.24;
 	unsigned nInfInit = 5;
-	unsigned nVaccInit = 25;
+	unsigned nVaccInit = 1200;
 
-	std::vector<unsigned> results = simulateRandomVaccination(
+	// std::vector<unsigned> results = simulateRandomVaccination(
+	// 	"facebook_combined.txt",
+	// 	kMax,
+	// 	nu,
+	// 	alpha,
+	// 	delta,
+	// 	nInfInit,
+	// 	nVaccInit
+	// );
+	// std::cout << "nTrue = " << nTrue << std::endl;
+	// std::cout << "nFalse = " << nFalse << std::endl;
+
+	// exportResults(results, "epidemic_random.txt");
+
+
+	// Alternative : smart vaccination (PageRank based)
+
+	std::vector<unsigned> results = simulateSmartVaccination(
 		"facebook_combined.txt",
 		kMax,
 		nu,
@@ -380,21 +393,9 @@ int main(void) {
 		nVaccInit
 	);
 
-	exportResults(results, "epidemic_random.txt");
+	exportResults(results, "epidemic_smart.txt");
 
 
-	// Alternative : smart vaccination (PageRank based)
-	// std::vector<unsigned> results = simulateSmartVaccination(
-	// 	"facebook_combined.txt",
-	// 	kMax,
-	// 	nu,
-	// 	alpha,
-	// 	delta,
-	// 	nInfInit,
-	// 	nVaccInit
-	// );
-	//
-	//  exportResults(results, "epidemic_smart.txt");
 
 	return 0;
 }
