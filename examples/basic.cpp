@@ -7,8 +7,8 @@ int main(void) {
 	float epsilon = 0.01f;
 
 	// Read base data file
-	Eigen::MatrixXf R = parseNeighboursList("data.txt");
-	Eigen::MatrixXf x = improvedPageRank(R, alpha, epsilon);
+	Eigen::MatrixXf A = parseNeighboursList("data.txt");
+	Eigen::MatrixXf x = improvedPageRank(A, alpha, epsilon);
 
 	// Read Facebook data file (must be downloaded)
 	// Eigen::MatrixXf R = parseEdgesList("facebook_combined.txt");

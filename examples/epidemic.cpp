@@ -1,34 +1,95 @@
 #include <vector>
+#include <string>
+#include<fstream>
+#include <sys/stat.h>
+#include <cstdlib>
 
 #include "../include/parser.hpp"
 #include "../include/pagerank.hpp"
 
-class EpidemicState {
-public:
-	float infected;
-	float cured;
-	float vaccinated;
+
+	// Util functiobns
+
+float genProba() {
+	return static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+}
 
 
-	EpidemicState(float nInfected, float nCured, float nVaccinated) {
-		infected = nInfected;
-		cured = nCured;
-		vaccinated = nVaccinated;
+
+unsigned genInteger(unsigned max) {
+	return (rand() % static_cast<unsigned>(max + 1));
+}
+
+
+
+void removeMatRow(Eigen::MatrixXf& mat, unsigned rowToRemove) {
+    unsigned numRows = mat.rows() - 1;
+    unsigned numCols = mat.cols();
+
+    if( rowToRemove < numRows ) {
+        mat.block(rowToRemove, 0, numRows-rowToRemove,numCols) = mat.bottomRows(numRows - rowToRemove);
 	}
 
+    mat.conservativeResize(numRows,numCols);
+}
 
-};
+
+
+void removeArrrRow(Eigen::ArrayXf& array, unsigned rowToRemove) {
+    unsigned numRows = array.rows() - 1;
+    unsigned numCols = array.cols();
+
+    if( rowToRemove < numRows ) {
+        array.block(rowToRemove, 0, numRows-rowToRemove,numCols) = array.bottomRows(numRows - rowToRemove);
+	}
+
+    array.conservativeResize(numRows,numCols);
+}
 
 
 
-// Modify matrix to make sure that all edges go both way
-void removeOrientation(Eigen::MatrixXf &R) {
-	for(unsigned j=0; j<R.cols(); j++) {
-		for(unsigned i=0; i<R.cols(); i++) {
+void removeMatColumn(Eigen::MatrixXf& mat, unsigned colToRemove) {
+    unsigned numRows = mat.rows();
+    unsigned numCols = mat.cols() - 1;
+
+    if( colToRemove < numCols ) {
+        mat.block(0, colToRemove, numRows, numCols-colToRemove) = mat.rightCols(numCols - colToRemove);
+	}
+
+    mat.conservativeResize(numRows,numCols);
+}
+
+
+
+	// Store simulation data
+
+void exportResults(std::vector<unsigned> &results, std::string path) {
+
+	std::streambuf* oldCoutStreamBuf = std::cout.rdbuf();
+
+	// Save cases
+	freopen(path.c_str(), "w", stdout);
+
+	for(unsigned i=0; i<results.size(); i++) {
+		std::cout << results[i] << std::endl;
+	}
+
+	std::cout.rdbuf( oldCoutStreamBuf );
+}
+
+
+
+
+
+	// Modify matrix to make sure that all edges go both way
+
+void removeOrientation(Eigen::MatrixXf &A) {
+	for(unsigned j=0; j<A.cols(); j++) {
+		for(unsigned i=0; i<A.cols(); i++) {
 
 			// If edge exists, create the opposite one
-			if( R(i,j) ) {
-				R(j,i) = 1.0f;
+			if( A(i,j) ) {
+				A(j,i) = 1.0f;
 			}
 
 		}
@@ -37,215 +98,303 @@ void removeOrientation(Eigen::MatrixXf &R) {
 
 
 
-// From a graph's adjacency matrix, generate its probability matrix A
-Eigen::MatrixXf infectionMatrix(Eigen::MatrixXf &R, float alpha, float nu) {
+	// Implementation of simulations with both vaccination methods
 
-		Eigen::MatrixXf Rt = R.transpose();
-		Eigen::MatrixXf Rsum = Rt.colwise().sum();
 
-		// Create probability matrix A
-		Eigen::MatrixXf A = Eigen::MatrixXf();
-		A.resize(R.rows(), R.cols());
+// Infection functions
 
-		// Fill A
-		for(unsigned j=0; j<Rt.cols(); j++) {
+void infectNeigbours(
+	Eigen::MatrixXf &A, Eigen::ArrayXf &infections,
+	unsigned &j, float nu
+) {
 
-			// Has edges
-			if(Rsum(0, j) != 0) {
-				for(unsigned i=0; i<A.rows(); i++) {
-					A(i, j) =
-					alpha * Rt(i, j) / Rsum(0, j) + nu / A.cols();
+	// Check all nodes to find neighbours
+	for(unsigned i=0; i<A.rows(); i++) {
+
+		// If we find one..
+		if(A(i, j)) {
+			// ... try to infect it with a probability nu
+			if(genProba() < nu) {
+				// It will be active from this step if i>j !
+				// (this should not affect the simulation results too much)
+				infections(i) = 1;
+			}
+		}
+	}
+}
+
+
+
+void infectByJumping(
+	Eigen::MatrixXf &A, Eigen::ArrayXf &infections,
+	unsigned &j, float alpha
+) {
+	// First, make sure that this node is not neighbour with everyone to
+	// avoid infinite loop later
+	if(A.block(j, 0, 1, A.rows()).sum() == A.rows()) {
+		return;
+	}
+
+	// Pick a random node until we're not on ourselves or a neighobur
+	bool complete = false;
+
+	while(!complete) {
+		unsigned node = genInteger(A.rows() - 1);
+
+		// We found a potential target
+		if((unsigned) node != j && !A(j, node)) {
+			if(genProba() < alpha) {
+				infections(node) = 1;
+			}
+
+			complete = true;	// Mark tentative as complete
+		}
+	}
+}
+
+
+
+// This is the simulation main loop, vaccinations / infections should be done
+// before calling this
+std::vector<unsigned> loopSimulation(
+	Eigen::MatrixXf &A,
+	Eigen::ArrayXf &infections,
+	unsigned &kMax,
+	float &nu,
+	float &alpha,
+	float &delta,
+	unsigned nInfInit
+) {
+
+		// Initialize results array
+
+	std::vector<unsigned> results = {
+		nInfInit
+	};
+
+
+		// Start iterations
+
+	for(unsigned k=0; k<kMax; k++) {
+
+		// Iterate over all nodes ...
+		for(unsigned j=0; j<infections.rows(); j++) {
+
+			// ... and if infected, try to infect others
+			if(infections(j)) {
+
+				// Iterate over all nodes again, check if they are neighbours
+				infectNeigbours(A, infections, j, nu);
+
+				// Pick a non neighbour node and try to infect it
+				infectByJumping(A, infections, j, alpha);
+
+				// Try to cure that node
+				if(genProba() < delta) {
+					// We made the choice to make recovered nodes
+					// infectable again
+					infections(j) = 0;
 				}
 			}
 
-			// No edges
-			else {
-				A.block(0, j, A.rows(), 1).fill(nu / A.cols());
+		}
+
+		results.push_back(infections.sum());
+	}
+
+	return results;
+}
+
+
+// This version implements random vaccination (no PageRank)
+std::vector<unsigned> simulateRandomVaccination(
+	std::string path,
+	unsigned kMax,
+	float nu,
+	float alpha,
+	float delta,
+	unsigned nInfInit,
+	unsigned nVaccInit
+) {
+
+	Eigen::MatrixXf A = parseNeighboursList(path);
+	removeOrientation(A);
+
+
+		// Initialize vector of infections
+
+	Eigen::ArrayXf infections;
+	infections.setZero(A.rows(), 1);
+
+
+		// Pick random infected nodes
+
+	std::vector<unsigned> pickedNodes = {};
+	while(pickedNodes.size() < nInfInit) {
+		unsigned node = genInteger(A.rows());
+
+		// Make sure it has not been picked before
+		bool picked = false;
+		for(unsigned i=0; i<pickedNodes.size(); i++) {
+			if(picked == pickedNodes[i]) {
+				picked = true;
+				break;
 			}
 		}
 
-		return A;
-}
-
-
-
-// Re-implementation PageRank but adding steps to fully simulate the evolution
-// of cases in the epidemic. Returns array containing infected, healed, and
-// vaccinated after each timestep.
-
-
-// This version implements random vaccination
-std::vector<EpidemicState> simulateRandomVaccination(
-	Eigen::MatrixXf &R,
-	unsigned timesteps,
-	float alpha,
-	float nu,
-	float delta,
-	std::vector<float> v
-) {
-
-		// Initialization
-
-	// Get population size and proportion of cured / vaccinated
-	int n = R.rows();
-	float uncured = 1;	// = cured / infected (1 is initial value only)
-	float vaccinated = 0;	// Proportion of vaccinated
-
-	// Get probability matrix
-	Eigen::MatrixXf A = infectionMatrix(R, alpha, nu);
-
-	// Initialize x
-	Eigen::MatrixXf x;
-	x.resize(A.rows(), 1);
-	x.fill(1.0 / x.rows());
-
-	// Create vector storing simulation results
-	std::vector<EpidemicState> results;
-	results.push_back(EpidemicState(1, 0, 0));
-
-	// Store avg infection probabilities
-	Eigen::MatrixXf avgPInf = x;
-
-	std::cout << "About to start iterations" << std::endl;
-
-		// Iteration
-	for(unsigned k=0; k<timesteps; k++) {
-
-		// Update simulation
-		x = A * x;
-		x = x / x.sum();
-
-		uncured = uncured * (1.0f - delta);
-		vaccinated = vaccinated + v[k];
-
-		// Update avgPInf
-		avgPInf = ((float)( k + 1) * avgPInf + x) / (float)(k + 2);
-
-		// Add current epidemic state to results
-		results.push_back(EpidemicState(
-			((1.0f - (1.0f - avgPInf.array()).pow(k+1)) * uncured * (1 - vaccinated)).sum(),
-			(float) n * uncured,
-			(float) n * vaccinated
-		));
-
-	}
-
-	return results;
-}
-
-
-
-// This version implements random vaccination
-std::vector<EpidemicState> simulateSmartVaccination(
-	Eigen::MatrixXf &R,
-	unsigned timesteps,
-	float alpha,
-	float nu,
-	float delta,
-	std::vector<unsigned> v
-) {
-
-		// Initialization
-
-	// Get population size and proportion of cured / vaccinated
-	int n = R.rows();
-	float uncured = 1;	// = cured / infected (1 is initial value only)
-	float vaccinated = 0;	// Proportion of vaccinated
-
-	// Get probability matrix
-	Eigen::MatrixXf A = infectionMatrix(R, alpha, nu);
-
-	// Initialize x
-	Eigen::MatrixXf x;
-	x.resize(A.rows(), 1);
-	x.fill(1.0 / x.rows());
-
-	// Create vector storing simulation results
-	std::vector<EpidemicState> results;
-	results.push_back(EpidemicState(1, 0, 0));
-
-	// Store avg infection probabilities
-	Eigen::MatrixXf avgPInf = x;
-
-
-		// Iteration
-	int maxX = 0, maxY = 0;	// Indices for vaccination
-	for(unsigned k=0; k<timesteps; k++) {
-
-		// Update simulation
-		x = A * x;
-		x = x / x.sum();
-
-		uncured = uncured * (1.0f - delta);
-
-		// Update avgPInf
-		avgPInf = ((float)( k + 1) * avgPInf + x) / (float)(k + 2);
-
-		// Apply smart vaccination
-		for(unsigned i=0; i<v[k]; i++) {
-			x.maxCoeff(&maxX, &maxY);
-			avgPInf(maxX, maxY) = 0;
-
-			// Also putting column to 0 so infections are impossible in the
-			// future
-			A.block(0, maxX, A.rows(), maxX);
+		if(picked) {
+			continue;
 		}
 
-
-		// Add current epidemic state to results
-		results.push_back(EpidemicState(
-			((1.0f - (1.0f - avgPInf.array()).pow(k+1)) * uncured * (1 - vaccinated)).sum(),
-			(float) n * uncured,
-			(float) n * vaccinated
-		));
-
+		// At this point, node has not been added and can be infected
+		infections(node) = 1;
+		pickedNodes.push_back(node);
 	}
 
-	return results;
+	pickedNodes = {};
+
+
+		// Vaccinate randomly
+
+	for(unsigned i=0; i<nVaccInit; i++){
+		// We will directly remove the node, thus verifications are not
+		// needed after picking
+		unsigned node = genInteger(A.rows());
+
+		removeMatRow(A, node);
+		removeMatColumn(A, node);
+		removeArrrRow(infections, node);
+	}
+
+
+		// Compute actual core of simulation (independant of vaccination methods)
+
+	return loopSimulation(
+		A,
+		infections,
+		kMax,
+		nu,
+		alpha,
+		delta,
+		nInfInit
+	);
 }
 
+
+
+// This version implements smart vaccination (w/ PageRank)
+std::vector<unsigned> simulateSmartVaccination(
+	std::string path,
+	unsigned kMax,
+	float nu,
+	float alpha,
+	float delta,
+	unsigned nInfInit,
+	unsigned nVaccInit
+) {
+
+	Eigen::MatrixXf A = parseNeighboursList(path);
+	removeOrientation(A);
+
+
+		// Initialize vector of infections
+
+	Eigen::ArrayXf infections;
+	infections.setZero(A.rows(), 1);
+
+
+		// Pick random infected nodes
+
+	std::vector<unsigned> pickedNodes = {};
+	while(pickedNodes.size() < nInfInit) {
+		unsigned node = genInteger(A.rows());
+
+		// Make sure it has not been picked before
+		bool picked = false;
+		for(unsigned i=0; i<pickedNodes.size(); i++) {
+			if(picked == pickedNodes[i]) {
+				picked = true;
+				break;
+			}
+		}
+
+		if(picked) {
+			continue;
+		}
+
+		// At this point, node has not been added and can be infected
+		infections(node) = 1;
+		pickedNodes.push_back(node);
+	}
+
+	pickedNodes = {};
+
+
+		// Vaccinate according to PageRank ranking
+
+	Eigen::MatrixXf x = improvedPageRank(A, alpha, 0.01f);
+
+	// Get the nVaccInit biggest elements of the PageRank vector,
+	// and delete (vaccinate) them
+	for(unsigned i=0; i<nVaccInit; i++) {
+		int maxIndex;
+		x.col(0).maxCoeff(&maxIndex);
+
+		removeMatRow(A, maxIndex);
+		removeMatColumn(A, maxIndex);
+		removeArrrRow(infections, maxIndex);
+	}
+
+
+		// Compute actual core of simulation (independant of vaccination methods)
+
+	return loopSimulation(
+		A,
+		infections,
+		kMax,
+		nu,
+		alpha,
+		delta,
+		nInfInit
+	);
+}
 
 
 int main(void) {
+	srand (time(NULL));
 
-	unsigned timesteps = 100;
-	float alpha = 0.65f;
-	float nu = 0.85f;
-	float delta = 0.02f;
+	unsigned kMax = 100;
+	float nu = 0.2;
+	float alpha = 0.85;
+	float delta = 0.24;
+	unsigned nInfInit = 5;
+	unsigned nVaccInit = 25;
 
-	float vector for random vaccination
-	std::vector<float> v = {};
-	for(unsigned i=0; i<timesteps; i++) {
-		v.push_back(0);
-	}
-
-	// Alternative : unsigned vector for smart vaccination
-	// std::vector<unsigned> v = {};
-	// for(unsigned i=0; i<timesteps; i++) {
-	// 	v.push_back(4);
-	// }
-
-	// Read base data file
-	Eigen::MatrixXf R = parseNeighboursList("facebook_combined.txt");
-	removeOrientation(R);
-
-
-	std::vector<EpidemicState> results = simulateRandomVaccination(
-		R, timesteps,
-		alpha, nu,
-		delta, v
+	std::vector<unsigned> results = simulateRandomVaccination(
+		"facebook_combined.txt",
+		kMax,
+		nu,
+		alpha,
+		delta,
+		nInfInit,
+		nVaccInit
 	);
 
-	// Alternative : smart vaccination
-	// std::vector<EpidemicState> results = simulateSmartVaccination(
-	// 	R, timesteps,
-	// 	alpha, nu,
-	// 	delta, v
-	// );
+	exportResults(results, "epidemic_random.txt");
 
-	for(unsigned i=0; i<timesteps; i++) {
-		std::cout << "Results " << i << ":" << std::endl;
-		std::cout << "	Cases : " << results[i].infected << std::endl;
-	}
+
+	// Alternative : smart vaccination (PageRank based)
+	// std::vector<unsigned> results = simulateSmartVaccination(
+	// 	"facebook_combined.txt",
+	// 	kMax,
+	// 	nu,
+	// 	alpha,
+	// 	delta,
+	// 	nInfInit,
+	// 	nVaccInit
+	// );
+	//
+	//  exportResults(results, "epidemic_smart.txt");
+
 	return 0;
 }
