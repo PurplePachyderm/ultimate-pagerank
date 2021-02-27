@@ -208,54 +208,35 @@ std::vector<unsigned> simulateRandomVaccination(
 
 		// Pick random infected nodes
 
-	std::vector<unsigned> pickedNodes = {};
-	while(pickedNodes.size() < nInfInit) {
-		unsigned node = genInteger(A.rows());
-
-		// Make sure it has not been picked before
-		bool picked = false;
-		for(unsigned i=0; i<pickedNodes.size(); i++) {
-			if(picked == pickedNodes[i]) {
-				picked = true;
-				break;
-			}
+		std::vector<unsigned> unpicked = {};
+		for(unsigned i=0; i<A.rows(); i++) {
+			unpicked.push_back(i);
 		}
 
-		if(picked) {
-			continue;
+		for(unsigned i=0; i<nInfInit; i++) {
+			unsigned node = genInteger(unpicked.size() - 1);
+			unpicked.erase(unpicked.begin() + node);
+
+			infections(node) = 1;
 		}
-
-		// At this point, node has not been added and can be infected
-		infections(node) = 1;
-		pickedNodes.push_back(node);
-	}
-
-	pickedNodes = {};
+		unpicked = {};
 
 
 		// Vaccinate randomly
 
+	for(unsigned i=0; i<A.rows(); i++) {
+		unpicked.push_back(i);
+	}
+
 	std::vector<unsigned> vaccinated = {};
 	while(vaccinated.size() < nVaccInit) {
-		unsigned node = genInteger(A.rows());
+		unsigned node = genInteger(unpicked.size() - 1);
+		unpicked.erase(unpicked.begin() + node);
 
-		// Make sure it has not been picked before
-		bool picked = false;
-		for(unsigned i=0; i<vaccinated.size(); i++) {
-			if(picked == vaccinated[i]) {
-				picked = true;
-				break;
-			}
-		}
-
-		if(picked) {
-			continue;
-		}
-
-		// At this point, node has not been added and can be infected
-		infections(node) = 0;
+		infections(node) = 0;	// In case it was infected before
 		vaccinated.push_back(node);
 	}
+	unpicked = {};
 
 
 
