@@ -8,9 +8,12 @@ improved [PageRank](https://www.wikiwand.com/en/PageRank) algorithm.
 
 ## Usage
 
-Build the code using the `make` command. The `main.cpp` file is an example
+Build the code using the `make` command. The `basic` executable is an example
 that can read a few different files containing a graph, and generate the
 adjacency matrix to run PageRank on it.
+
+The `epidemic` executable shows how PageRank can be used for an efficient
+vaccination strategy.
 
 ## Readable file formats
 
@@ -31,6 +34,6 @@ In this format, the first line is the size of the graph.
 All other lines are composed of 2 indices, corresponding to the start and
 destination of each edge.
 
-The `get-edges-list.sh` script downloads and modifies a file from
+The `get-fb-graph.sh` script downloads and modifies a file from
 [this](http://snap.stanford.edu/data/ego-Facebook.html) address, which is
 a sample of Facebook social circles.
